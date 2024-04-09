@@ -15,9 +15,9 @@ IP: 13.127.84.210
 Stream: mystream
 */
 
-const server_ip = '13.127.84.210';
-var m3u8_url = 'http://'+server_ip+':8888/mystream/index.m3u8';
-var list_url= 'http://'+server_ip+':9997/v3/paths/list';
+const server_ip = '10.102.216.142';
+var playback_url = 'videos/dish.mp4';
+var deploy_url= 'http://'+server_ip+'/design/deployed';
 
 void main() {
   runApp(const VideoApp());
@@ -34,6 +34,10 @@ class VideoApp extends StatefulWidget {
 class _VideoAppState extends State<VideoApp> {
   late VideoPlayerController _controller;
   var prev_time='';
+  var deployed_id = 0;
+  var playing_asset = true;
+
+  late Timer _checkTimer;
 
   @override
   void initState() {
@@ -42,15 +46,18 @@ class _VideoAppState extends State<VideoApp> {
       Wakelock.enable();
       // You could also use Wakelock.toggle(on: true);
     });
+
+
     const oneSec = Duration(seconds:5);
-    Timer.periodic(oneSec, (Timer t) => check_video());
+    _checkTimer = Timer.periodic(oneSec, (Timer t) => check_video());
     get_url();
-    print('loading url '+ m3u8_url);
-    _controller = VideoPlayerController.networkUrl(Uri.parse(m3u8_url))
+    _controller = VideoPlayerController.asset(playback_url)
       ..initialize().then((_) {
         // Ensure the first frame is shown after the video is initialized, even before the play button has been pressed.
         setState(() {
           _controller.play();
+          _controller.setLooping(true);
+          playing_asset = true;
           //_controller.dispose();
         });
       });
@@ -63,24 +70,47 @@ class _VideoAppState extends State<VideoApp> {
         print('completed');
       }
     });
-
   }
 
   Future<void> get_url() async {
-    late VideoPlayerController newController;
-    var url = Uri.parse(list_url);
+    var url = Uri.parse(deploy_url);
+    var id =0;
+    var type= '';
+
     // Await the http get response, then decode the json-formatted response.
     var response = await http.get(url);
     if (response.statusCode == 200) {
       var jsonResponse =
       convert.jsonDecode(response.body) as Map<String, dynamic>;
-      if (jsonResponse['items'].isEmpty) {
-        print('Array is empty, nothing is being played');
+      if (jsonResponse['result'] == 'success') {
+        deployed_id = jsonResponse['id'];
+         type = jsonResponse['type'];
+         playback_url = 'http://$server_ip/generated/$deployed_id.mp4';
+         print('streaming link: ' + playback_url);
+        print('loading url '+ playback_url);
+        _controller = VideoPlayerController.networkUrl(Uri.parse(playback_url))
+          ..initialize().then((_) {
+            // Ensure the first frame is shown after the video is initialized, even before the play button has been pressed.
+            setState(() {
+              _controller.play();
+              _controller.setLooping(true);
+              //_controller.dispose();
+            });
+          });
+        _controller.addListener(() {
+          if(_controller.value.isBuffering){
+            print('buffering');
+          }else if(_controller.value.hasError){
+            print('error');
+          }else if(_controller.value.position == _controller.value.duration){
+            print('completed');
+          }
+        });
+        playing_asset = false;
       } else {
         print(jsonResponse['items'][0]);
-        m3u8_url = 'http://' + server_ip + ':8888/' +
-            jsonResponse['items'][0]['name'] + '/index.m3u8';
-        print('streaming link: ' + m3u8_url);
+        playback_url = 'http://$server_ip/generated/$deployed_id.mp4';
+        print('streaming link: ' + playback_url);
       }
     } else {
       print('Request failed with status: ${response.statusCode}.');
@@ -89,42 +119,54 @@ class _VideoAppState extends State<VideoApp> {
 
   Future<void> check_video() async {
     late VideoPlayerController newController;
-    var url = Uri.parse(list_url);
+    var url = Uri.parse(deploy_url);
     // Await the http get response, then decode the json-formatted response.
     var response = await http.get(url);
     if (response.statusCode == 200) {
       var jsonResponse =
       convert.jsonDecode(response.body) as Map<String, dynamic>;
-      if(jsonResponse['items'].isEmpty) {
-        print('Array is empty, nothing is being played');
-      }
-      else {
-        m3u8_url = 'http://' + server_ip + ':8888/' +
-            jsonResponse['items'][0]['name'] + '/index.m3u8';
-        if (prev_time == '') {
-          prev_time = jsonResponse['items'][0]['readyTime'];
-        }
-        else if (prev_time == jsonResponse['items'][0]['readyTime']) {
+      if (jsonResponse['result'] == 'success') {
+        playback_url = 'http://$server_ip/generated/$deployed_id.mp4';
+        if (deployed_id == jsonResponse['id']) {
           print('src has not changed');
         }
         else {
-          prev_time = jsonResponse['items'][0]['readyTime'];
-          print('Source changed. loading url ' + m3u8_url);
-          newController = VideoPlayerController.networkUrl(Uri.parse(m3u8_url),
+          deployed_id = jsonResponse['id'];
+          playback_url = 'http://$server_ip/generated/$deployed_id.mp4';
+          print('Source changed. loading url ' + playback_url);
+          newController = VideoPlayerController.networkUrl(Uri.parse(playback_url),
           )
             ..initialize().then((_) {
               setState(() {
                 _controller.dispose(); // Dispose the old controller
                 _controller = newController; // Assign the new controller
                 _controller.play();
+                _controller.setLooping(true);
               });
             });
         }
+        playing_asset = false;
+      } else {
+        if(false == playing_asset) {
+          newController = VideoPlayerController.asset('videos/dish.mp4')
+            ..initialize().then((_) {
+              setState(() {
+                _controller.dispose(); // Dispose the old controller
+                _controller = newController; // Assign the new controller
+                _controller.play();
+                _controller.setLooping(true);
+              });
+            });
+        }
+
+        playing_asset = true;
       }
     } else {
       print('Request failed with status: ${response.statusCode}.');
     }
   }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -132,15 +174,19 @@ class _VideoAppState extends State<VideoApp> {
       title: 'Video Demo',
       home: Scaffold(
         body: Center(
-          child: _controller.value.isInitialized
-              ? AspectRatio(
-            aspectRatio: _controller.value.aspectRatio,
-            child: VideoPlayer(_controller),
-          )
-              : Container(),
+          child: Center(
+            child: _controller.value.isInitialized
+                ? AspectRatio(
+              aspectRatio: _controller.value.aspectRatio,
+              child: VideoPlayer(_controller),
+            )
+                : Container(),
+          ),
         ),
       ),
     );
+
+
   }
 
   @override
@@ -151,5 +197,6 @@ class _VideoAppState extends State<VideoApp> {
       // You could also use Wakelock.toggle(on: false);
     });
     _controller.dispose();
+    _checkTimer.cancel();
   }
 }
