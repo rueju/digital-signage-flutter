@@ -17,7 +17,7 @@ Stream: mystream
 
 const server_ip = '10.102.216.142';
 var playback_url = 'videos/dish.mp4';
-var deploy_url= 'http://'+server_ip+'/design/deployed';
+var deploy_url= 'https://'+server_ip+'/design/deployed';
 
 void main() {
   runApp(const VideoApp());
@@ -85,7 +85,7 @@ class _VideoAppState extends State<VideoApp> {
       if (jsonResponse['result'] == 'success') {
         deployed_id = jsonResponse['id'];
          type = jsonResponse['type'];
-         playback_url = 'http://$server_ip/generated/$deployed_id.mp4';
+         playback_url = 'https://$server_ip/generated/$deployed_id.mp4';
          print('streaming link: ' + playback_url);
         print('loading url '+ playback_url);
         _controller = VideoPlayerController.networkUrl(Uri.parse(playback_url))
@@ -109,7 +109,7 @@ class _VideoAppState extends State<VideoApp> {
         playing_asset = false;
       } else {
         print(jsonResponse['items'][0]);
-        playback_url = 'http://$server_ip/generated/$deployed_id.mp4';
+        playback_url = 'https://$server_ip/generated/$deployed_id.mp4';
         print('streaming link: ' + playback_url);
       }
     } else {
@@ -126,13 +126,13 @@ class _VideoAppState extends State<VideoApp> {
       var jsonResponse =
       convert.jsonDecode(response.body) as Map<String, dynamic>;
       if (jsonResponse['result'] == 'success') {
-        playback_url = 'http://$server_ip/generated/$deployed_id.mp4';
+        playback_url = 'https://$server_ip/generated/$deployed_id.mp4';
         if (deployed_id == jsonResponse['id']) {
           print('src has not changed');
         }
         else {
           deployed_id = jsonResponse['id'];
-          playback_url = 'http://$server_ip/generated/$deployed_id.mp4';
+          playback_url = 'https://$server_ip/generated/$deployed_id.mp4';
           print('Source changed. loading url ' + playback_url);
           newController = VideoPlayerController.networkUrl(Uri.parse(playback_url),
           )
@@ -165,8 +165,6 @@ class _VideoAppState extends State<VideoApp> {
       print('Request failed with status: ${response.statusCode}.');
     }
   }
-
-
 
   @override
   Widget build(BuildContext context) {
